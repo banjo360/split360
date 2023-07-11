@@ -13,7 +13,6 @@ segments:
     name: header
     format: bin                                # dumped "as-is" in `bin/<name>.bin`
   - start: 0xc7a70
-    vram: 0x820c5a70                           # only for "asm" files
     size: 0x40
     name: func_820c5a70
     format: asm                                # will be decompiled to PPC assembly
