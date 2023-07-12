@@ -17,8 +17,8 @@ use sha1::{Sha1, Digest};
 struct Segment {
     start: u64,
     size: usize,
-    vram: Option<u64>,
     name: String,
+    path: Option<String>,
     format: String,
 }
 
@@ -41,7 +41,7 @@ fn main() {
 
     match cmd.as_str() {
         "split" => cmd_split(args),
-        "rebuild" => cmd_rebuild(args),
+        "merge" => cmd_merge(args),
         "checksum" => cmd_checksum(args),
         _ => panic!("Unknown command '{}'.", cmd)
     }
@@ -74,23 +74,50 @@ fn cmd_split(args: Vec<String>) {
         panic!("{} doesn't have the correct sha1.", input_file);
     }
 
+    let mut curr_addr = 0u64;
+    let file_size = std::fs::metadata(&input_file).unwrap().len();
     let mut f = File::open(&input_file).unwrap();
-    for seg in result.segments {
-        f.seek(SeekFrom::Start(seg.start)).unwrap();
-        let mut buff = vec![0u8; seg.size];
-        f.read(&mut buff).unwrap();
+    let mut index = 0;
+    while index < result.segments.len() {
+        let seg = &result.segments[index];
 
-        if seg.format != "c" {
-            std::fs::create_dir_all(&seg.format).unwrap();
-        }
+        if curr_addr < seg.start {
+            std::fs::create_dir_all("bin").unwrap();
 
-        match seg.format.as_str() {
-            "bin" => std::fs::write(format!("{}/{}.bin", seg.format, seg.name), buff).unwrap(),
-            "asm" => disassemble(&seg, &buff, &symbols),
-            "c" => {},
-            _ => panic!("Unknown format '{}'!", seg.format),
+            let size = (seg.start - curr_addr) as usize;
+            let filename = format!("bin/bin_{:x}.bin", curr_addr);
+
+            dump_bin(&mut f, size, &filename);
+
+            curr_addr = seg.start;
+        } else {
+            let size = seg.size;
+
+            assert_eq!(f.stream_position().unwrap(), curr_addr);
+            let mut buff = vec![0u8; size as usize];
+            f.read(&mut buff).unwrap();
+
+            match seg.format.as_str() {
+                "bin" => {
+                    let dir = if let Some(path) = &seg.path { &path } else { "bin" };
+                    std::fs::create_dir_all(dir).unwrap();
+                    std::fs::write(format!("{}/{}.bin", dir, seg.name), buff).unwrap()
+                },
+                "asm" => disassemble(&seg, &buff, &symbols),
+                "c" => {},
+                _ => panic!("Unknown format '{}'!", seg.format),
+            }
+
+            curr_addr += (seg.size as u64);
+            index += 1;
         }
     }
+}
+
+fn dump_bin(file: &mut File, size: usize, filename: &str) {
+    let mut buff = vec![0u8; size];
+    file.read(&mut buff).unwrap();
+    std::fs::write(filename, buff).unwrap();
 }
 
 fn disassemble(segment: &Segment, data: &[u8], symbols: &HashMap::<String, u64>) {
@@ -123,9 +150,9 @@ fn check_sha1sum(filename: &str, sha1: &str) -> bool {
     sha1 == calculate_sha1sum(filename)
 }
 
-fn cmd_rebuild(args: Vec<String>) {
+fn cmd_merge(args: Vec<String>) {
     if args.len() != 2 {
-        panic!("'rebuild' command requires 2 arguments: <file>.yaml <file>.xex");
+        panic!("'merge' command requires 2 arguments: <file>.yaml <file>.xex");
     }
 
     let strbuf = std::fs::read_to_string(args[0].clone()).unwrap();
@@ -134,14 +161,28 @@ fn cmd_rebuild(args: Vec<String>) {
 
     let mut cat_command = Command::new("/bin/cat");
 
-    for seg in result.segments {
-        let n = seg.name;
-        let f = seg.format;
+    let mut curr_addr = 0;
+    let mut index = 0;
+    while index < result.segments.len() {
+        let seg = &result.segments[index];
 
-        let filename = match f.as_str() {
-            "bin" => format!("bin/{}.bin", n),
-            "c" => format!("build/{}.obj.bin", n),
-            _ => panic!("Unknown format '{}'.", f)
+        let filename = if seg.start == curr_addr {
+            let n = &seg.name;
+            let f = &seg.format;
+            curr_addr += (seg.size as u64);
+            index += 1;
+            match f.as_str() {
+                "bin" => {
+                    let dir = if let Some(path) = &seg.path { &path } else { "bin" };
+                    format!("bin/{}.bin", n)
+                },
+                "c" => format!("build/{}.obj.bin", n),
+                _ => panic!("Unknown format '{}'.", f)
+            }
+        } else {
+            let tmp_addr = curr_addr;
+            curr_addr = seg.start;
+            format!("bin/bin_{:x}.bin", tmp_addr)
         };
 
         cat_command.arg(&filename);
@@ -149,6 +190,7 @@ fn cmd_rebuild(args: Vec<String>) {
 
     let output_file = File::create(output_file).unwrap();
     cat_command.stdout(output_file);
+
     let status = cat_command.status().expect("failed to execute process");
     assert!(status.success());
 }
@@ -166,8 +208,8 @@ fn cmd_checksum(args: Vec<String>) {
     println!("checksum expected: {}", result.sha1);
     println!("checksum calculated: {}", sha1sum);
     if sha1sum == result.sha1 {
-        println!("OK");
+        println!("match");
     } else {
-        println!("ERROR");
+        println!("mismatch");
     }
 }
