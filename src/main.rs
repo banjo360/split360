@@ -44,7 +44,7 @@ fn main() {
         "merge" => cmd_merge(args),
         "checksum" => cmd_checksum(args),
         _ => panic!("Unknown command '{}'.", cmd)
-    }
+    };
 }
 
 fn cmd_split(args: Vec<String>) {
