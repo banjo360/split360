@@ -122,7 +122,7 @@ fn dump_bin(file: &mut File, size: usize, filename: &str) {
 
 fn disassemble(segment: &Segment, data: &[u8], symbols: &HashMap::<String, u64>) {
     std::fs::create_dir_all("asm").unwrap();
-    std::fs::write(format!("asm/{:X}.bin", segment.start), data).unwrap();
+    std::fs::write(format!("asm/{}.bin", segment.name), data).unwrap();
     
     let vram = if symbols.contains_key(&segment.name) { symbols[&segment.name] } else { 0 };
 
@@ -134,7 +134,7 @@ fn disassemble(segment: &Segment, data: &[u8], symbols: &HashMap::<String, u64>)
         .expect("Failed to create Capstone object");
     let insns = cs.disasm_all(data, vram).expect("Failed to disassemble");
 
-    let mut f = File::create(format!("asm/{:X}.bin.s", segment.start)).expect("Unable to create file");
+    let mut f = File::create(format!("asm/{}.bin.s", segment.name)).expect("Unable to create file");
     write!(f, "{}:\n", segment.name).unwrap();
     for i in insns.as_ref() {
         write!(f, "{}\n", i).unwrap();
@@ -178,6 +178,7 @@ fn cmd_merge(args: Vec<String>) {
                     format!("bin/{}.bin", n)
                 },
                 "c" => format!("build/{}.obj.bin", n),
+                "asm" => format!("asm/{}.bin", n),
                 _ => panic!("Unknown format '{}'.", f)
             }
         } else {
