@@ -90,7 +90,7 @@ fn cmd_split(args: Vec<String>) {
             dump_bin(&mut f, size, &filename);
 
             curr_addr = start;
-        } else {
+        } else if curr_addr == start {
             let seg = &result.segments[index];
             let size = seg.size;
 
@@ -107,10 +107,12 @@ fn cmd_split(args: Vec<String>) {
                 "asm" => disassemble(&seg, &buff, &symbols),
                 "c" => {},
                 _ => panic!("Unknown format '{}'!", seg.format),
-            }
+            };
 
             curr_addr += (seg.size as u64);
             index += 1;
+        } else {
+            panic!("Expected address ({:#X}) is lower than current address ({:#X}). Check your .yaml file.", start, curr_addr);
         }
     }
 }
@@ -177,11 +179,11 @@ fn cmd_merge(args: Vec<String>) {
             match f.as_str() {
                 "bin" => {
                     let dir = if let Some(path) = &seg.path { &path } else { "bin" };
-                    format!("bin/{}.bin", n)
+                    format!("{dir}/{n}.bin")
                 },
-                "c" => format!("build/{}.bin", n),
-                "asm" => format!("asm/{}.bin", n),
-                _ => panic!("Unknown format '{}'.", f)
+                "c" => format!("build/{n}.bin"),
+                "asm" => format!("asm/{n}.bin"),
+                _ => panic!("Unknown format '{f}'.")
             }
         } else {
             let tmp_addr = curr_addr;
