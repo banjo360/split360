@@ -20,6 +20,7 @@ struct Segment {
     name: String,
     path: Option<String>,
     format: String,
+    segment: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
@@ -175,12 +176,18 @@ fn cmd_merge(args: Vec<String>) {
             let f = &seg.format;
             curr_addr += (seg.size as u64);
             index += 1;
+            let segment_type = if let Some(seg_name) = &seg.segment {
+                format!(".{}", seg_name)
+            } else {
+                "".to_string()
+            };
+
             let binfile = match f.as_str() {
                 "bin" => {
                     let dir = if let Some(path) = &seg.path { &path } else { "bin" };
                     format!("{dir}/{n}.bin")
                 },
-                "c" => format!("build/{n}.bin"),
+                "c" => format!("build/{n}{segment_type}.bin"),
                 "asm" => format!("asm/{n}.bin"),
                 _ => panic!("Unknown format '{f}'.")
             };
