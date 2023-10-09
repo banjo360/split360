@@ -165,7 +165,6 @@ fn cmd_merge(args: Vec<String>) {
 
     let mut cat_command = Command::new("/bin/cat");
 
-    let file_size = std::fs::metadata(&output_file).unwrap().len();
     let mut curr_addr = 0;
     let mut index = 0;
     while index < result.segments.len() {
@@ -176,7 +175,7 @@ fn cmd_merge(args: Vec<String>) {
             let f = &seg.format;
             curr_addr += (seg.size as u64);
             index += 1;
-            match f.as_str() {
+            let binfile = match f.as_str() {
                 "bin" => {
                     let dir = if let Some(path) = &seg.path { &path } else { "bin" };
                     format!("{dir}/{n}.bin")
@@ -184,17 +183,23 @@ fn cmd_merge(args: Vec<String>) {
                 "c" => format!("build/{n}.bin"),
                 "asm" => format!("asm/{n}.bin"),
                 _ => panic!("Unknown format '{f}'.")
-            }
+            };
+
+            let file_size = std::fs::metadata(&binfile).unwrap().len();
+            assert_eq!(file_size, seg.size as u64);
+            binfile
         } else {
             let tmp_addr = curr_addr;
             curr_addr = seg.start;
+            let file_size = std::fs::metadata(&format!("bin/bin_{:x}.bin", tmp_addr)).unwrap().len();
+            assert_eq!(file_size, curr_addr - tmp_addr);
             format!("bin/bin_{:x}.bin", tmp_addr)
         };
 
         cat_command.arg(&filename);
     }
 
-    if curr_addr < file_size {
+    if std::fs::metadata(&format!("bin/bin_{:x}.bin", curr_addr)).is_ok() {
         cat_command.arg(format!("bin/bin_{:x}.bin", curr_addr));
     }
 
