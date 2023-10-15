@@ -105,8 +105,12 @@ fn cmd_split(args: Vec<String>) {
                     std::fs::create_dir_all(dir).unwrap();
                     std::fs::write(format!("{}/{}.bin", dir, seg.name), buff).unwrap()
                 },
-                "asm" => disassemble(&seg, &buff, &symbols),
-                "c" => {},
+                "asm" => disassemble(&seg, &buff, &symbols, "asm"),
+                "c" => {
+                    if seg.segment.is_none() {
+                        disassemble(&seg, &buff, &symbols, "matching");
+                    }
+                },
                 _ => panic!("Unknown format '{}'!", seg.format),
             };
 
@@ -124,9 +128,11 @@ fn dump_bin(file: &mut File, size: usize, filename: &str) {
     std::fs::write(filename, buff).unwrap();
 }
 
-fn disassemble(segment: &Segment, data: &[u8], symbols: &HashMap::<String, u64>) {
-    std::fs::create_dir_all("asm").unwrap();
-    std::fs::write(format!("asm/{}.bin", segment.name), data).unwrap();
+fn disassemble(segment: &Segment, data: &[u8], symbols: &HashMap::<String, u64>, directory: &str) {
+    std::fs::create_dir_all(directory).unwrap();
+    if directory == "asm" {
+        std::fs::write(format!("{}/{}.bin", directory, segment.name), data).unwrap();
+    }
     
     let vram = if symbols.contains_key(&segment.name) { symbols[&segment.name] } else { 0 };
 
@@ -138,7 +144,7 @@ fn disassemble(segment: &Segment, data: &[u8], symbols: &HashMap::<String, u64>)
         .expect("Failed to create Capstone object");
     let insns = cs.disasm_all(data, vram).expect("Failed to disassemble");
 
-    let mut f = File::create(format!("asm/{}.bin.s", segment.name)).expect("Unable to create file");
+    let mut f = File::create(format!("{}/{}.s", directory, segment.name)).expect("Unable to create file");
     write!(f, "{}:\n", segment.name).unwrap();
     for i in insns.as_ref() {
         write!(f, "{}\n", i).unwrap();
