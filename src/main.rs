@@ -1,7 +1,9 @@
 #![allow(unused)]
 
+use std::fs::OpenOptions;
 use std::fs::File;
 use serde::Deserialize;
+use std::io;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Read;
@@ -168,9 +170,9 @@ fn cmd_merge(args: Vec<String>) {
 
     let strbuf = std::fs::read_to_string(args[0].clone()).unwrap();
     let result: Splitter = serde_yaml::from_str(&strbuf).unwrap();
-    let output_file = args[1].clone();
+    let output_filename = args[1].clone();
 
-    let mut cat_command = Command::new("/bin/cat");
+    let mut output_file = OpenOptions::new().write(true).create(true).open(&output_filename).unwrap();
 
     let mut curr_addr = 0;
     let mut index = 0;
@@ -209,18 +211,15 @@ fn cmd_merge(args: Vec<String>) {
             format!("bin/bin_{:x}.bin", tmp_addr)
         };
 
-        cat_command.arg(&filename);
+        let mut other_file = OpenOptions::new().read(true).open(&filename).unwrap();
+        io::copy(&mut other_file, &mut output_file).unwrap();
     }
 
-    if std::fs::metadata(&format!("bin/bin_{:x}.bin", curr_addr)).is_ok() {
-        cat_command.arg(format!("bin/bin_{:x}.bin", curr_addr));
+    let last_filename = format!("bin/bin_{:x}.bin", curr_addr);
+    if std::fs::metadata(&last_filename).is_ok() {
+        let mut other_file = OpenOptions::new().read(true).open(&last_filename).unwrap();
+        io::copy(&mut other_file, &mut output_file).unwrap();
     }
-
-    let output_file = File::create(output_file).unwrap();
-    cat_command.stdout(output_file);
-
-    let status = cat_command.status().expect("failed to execute process");
-    assert!(status.success());
 }
 
 fn cmd_checksum(args: Vec<String>) {
