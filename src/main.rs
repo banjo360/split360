@@ -1,15 +1,11 @@
-#![allow(unused)]
-
 use std::fs::OpenOptions;
 use std::fs::File;
 use serde::Deserialize;
 use std::io;
 use std::io::Seek;
-use std::io::SeekFrom;
 use std::io::Read;
 use std::io::Write;
 use std::env;
-use std::process::Command;
 use std::collections::HashMap;
 
 use capstone::prelude::*;
@@ -116,7 +112,7 @@ fn cmd_split(args: Vec<String>) {
                 _ => panic!("Unknown format '{}'!", seg.format),
             };
 
-            curr_addr += (seg.size as u64);
+            curr_addr += seg.size as u64;
             index += 1;
         } else {
             panic!("Expected address ({:#X}) is lower than current address ({:#X}). Check your .yaml file.", start, curr_addr);
@@ -182,7 +178,7 @@ fn cmd_merge(args: Vec<String>) {
         let filename = if seg.start == curr_addr {
             let n = &seg.name;
             let f = &seg.format;
-            curr_addr += (seg.size as u64);
+            curr_addr += seg.size as u64;
             index += 1;
             let segment_type = if let Some(seg_name) = &seg.segment {
                 format!(".{}", seg_name)
