@@ -128,9 +128,7 @@ fn dump_bin(file: &mut File, size: usize, filename: &str) {
 
 fn disassemble(segment: &Segment, data: &[u8], symbols: &HashMap::<String, u64>, directory: &str) {
     std::fs::create_dir_all(directory).unwrap();
-    if directory == "asm" {
-        std::fs::write(format!("{}/{}.bin", directory, segment.name), data).unwrap();
-    }
+    std::fs::write(format!("{}/{}.bin", directory, segment.name), data).unwrap();
     
     let vram = if symbols.contains_key(&segment.name) { symbols[&segment.name] } else { 0 };
 
