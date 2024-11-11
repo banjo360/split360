@@ -1,3 +1,4 @@
+use std::sync::LazyLock;
 use std::fs::OpenOptions;
 use std::fs::File;
 use serde::Deserialize;
@@ -9,6 +10,7 @@ use std::env;
 use std::collections::HashMap;
 use capstone::prelude::*;
 use sha1::{Sha1, Digest};
+use regex::Regex;
 
 #[derive(Debug, PartialEq, Deserialize)]
 struct Segment {
@@ -125,6 +127,8 @@ fn dump_bin(file: &mut File, size: usize, filename: &str) {
     std::fs::write(filename, buff).unwrap();
 }
 
+static ADDR_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"0x[0-9a-zA-Z]{8}").unwrap());
+
 fn disassemble(name: &str, data: &[u8], addr: u64, symbols: &HashMap::<u64, String>, directory: &str) {
     std::fs::create_dir_all(directory).unwrap();
     std::fs::write(format!("{}/{}.bin", directory, name), data).unwrap();
@@ -142,7 +146,42 @@ fn disassemble(name: &str, data: &[u8], addr: u64, symbols: &HashMap::<u64, Stri
         if let Some(name) = symbols.get(&i.address()) {
             write!(f, "{name}:\n").unwrap();
         }
-        write!(f, "{}\n", i).unwrap();
+
+        let op_str = format!("{}", i.op_str().unwrap());
+
+        if let Some(caps) = ADDR_REGEX.captures(&op_str) {
+            assert_eq!(caps.len(), 1);
+
+            let (start, end) = if let Some(cap) = caps.get(0) {
+                (cap.start(), cap.end())
+            } else {
+                panic!("shouldn't be triggered thanks to the assert above.");
+            };
+
+            assert!(start != end);
+
+            let mut output_str = String::new();
+            if start > 0 {
+                output_str.push_str(&op_str[..start]);
+            }
+
+            let addr_str = u64::from_str_radix(&op_str[(start+2)..end], 16).unwrap();
+            output_str.push_str(if let Some(symname) = symbols.get(&addr_str) {
+                symname
+            } else {
+                &op_str[start..end]
+            });
+
+            if end < op_str.len() - 1 {
+                output_str.push_str(&op_str[end..]);
+            }
+
+            write!(f, "{:#x}: {} {}\n", i.address(), i.mnemonic().unwrap(), output_str).unwrap();
+        }
+        else
+        {
+            write!(f, "{}\n", i).unwrap();
+        }
     }
 }
 
