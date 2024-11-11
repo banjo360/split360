@@ -1,7 +1,3 @@
-use byteorder::WriteBytesExt;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::io::SeekFrom;
 use std::fs::OpenOptions;
 use std::fs::File;
 use serde::Deserialize;
@@ -11,8 +7,6 @@ use std::io::Read;
 use std::io::Write;
 use std::env;
 use std::collections::HashMap;
-use byteorder::{ReadBytesExt, LittleEndian};
-
 use capstone::prelude::*;
 use sha1::{Sha1, Digest};
 
@@ -201,7 +195,7 @@ fn cmd_merge(args: Vec<String>) {
                 },
                 "c" => format!("build/{n}{segment_type}.bin"),
                 "asm" => format!("asm/{n}.bin"),
-                "obj" => merge_obj_file(&n).unwrap(),
+                "obj" => format!("build/{n}.bin"),
                 _ => panic!("Unknown format '{f}'.")
             };
 
@@ -227,91 +221,6 @@ fn cmd_merge(args: Vec<String>) {
         let mut other_file = OpenOptions::new().read(true).open(&last_filename).unwrap();
         io::copy(&mut other_file, &mut output_file).unwrap();
     }
-}
-
-fn merge_obj_file(filename: &str) -> std::io::Result<String> {
-    let mut f = File::open(format!("build/{filename}.obj"))?;
-    let format = f.read_u16::<LittleEndian>()?;
-    assert_eq!(format, 0x01f2);
-    let sections_count = f.read_u16::<LittleEndian>()?;
-    f.seek(SeekFrom::Current(0x04))?;
-    let symbols_table = f.read_u32::<LittleEndian>()?;
-    let symbols_count = f.read_u32::<LittleEndian>()?;
-    let strings_table = symbols_table + 18 * symbols_count;
-    f.seek(SeekFrom::Current(0x04))?;
-
-    let mut functions_names = vec![];
-
-    for section_id in 1..=sections_count {
-        let mut buff = vec![0; 8usize];
-        f.read(&mut buff).unwrap();
-        let name = String::from_utf8(buff).unwrap().trim_matches(char::from(0)).to_string();
-        f.seek(SeekFrom::Current(0x20))?;
-
-        if name == ".text" {
-            let pos = f.stream_position()?;
-
-            let mut current = None;
-
-            for id in 0..symbols_count {
-                f.seek(SeekFrom::Start((symbols_table + id as u32 * 18) as u64))?;
-                let mut buff = vec![0; 8usize];
-                f.read(&mut buff).unwrap();
-
-                let _ = f.read_u32::<LittleEndian>()?;
-                let section_number  = f.read_u16::<LittleEndian>()?;
-
-                if section_number == section_id {
-                    if buff[0] == 0 {
-                        let ptr: [u8; 4] = [ buff[4], buff[5], buff[6], buff[7] ];
-                        let val = u32::from_le_bytes(ptr);
-
-                        let mut data = Vec::new();
-                        let pos = f.stream_position()?;
-                        f.seek(SeekFrom::Start((strings_table + val) as u64))?;
-                        let mut bufread = BufReader::new(&f);
-                        bufread.read_until(b'\0', &mut data).unwrap();
-                        f.seek(SeekFrom::Start(pos))?;
-
-                        let n = String::from_utf8(data).unwrap().trim_matches(char::from(0)).to_string();
-                        if n != name {
-                            current = Some(n);
-                        }
-                    }
-                }
-
-                if current.is_some() {
-                    break;
-                }
-            }
-
-            if let Some(c) = current {
-                functions_names.push(c);
-            }
-
-            f.seek(SeekFrom::Start(pos))?;
-        }
-    }
-
-    let mut output_file = OpenOptions::new().write(true).create(true).open(&format!("build/{filename}.bin")).unwrap();
-
-    let mut current_offset = 0;
-    for fname in functions_names {
-        if (current_offset % 8) == 4 {
-            output_file.write_u32::<LittleEndian>(0)?;
-            current_offset += 4;
-        }
-        assert_eq!(current_offset % 8, 0);
-
-        let func_file = format!("build/{fname}.bin");
-        let mut other_file = OpenOptions::new().read(true).open(&func_file).unwrap();
-        io::copy(&mut other_file, &mut output_file).unwrap();
-
-        let file_size = std::fs::metadata(&func_file).unwrap().len();
-        current_offset += file_size;
-    }
-
-    Ok(format!("build/{filename}.bin"))
 }
 
 fn cmd_checksum(args: Vec<String>) {
