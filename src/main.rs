@@ -108,11 +108,6 @@ fn cmd_split(args: Vec<String>) {
                         disassemble(&seg, &buff, &symbols, "matching");
                     }
                 },
-                "obj" => {
-                    let dir = "matching";
-                    std::fs::create_dir_all(dir).unwrap();
-                    std::fs::write(format!("{}/{}.bin", dir, seg.name), buff).unwrap();
-                },
                 _ => panic!("Unknown format '{}'!", seg.format),
             };
 
@@ -170,7 +165,7 @@ fn cmd_merge(args: Vec<String>) {
     let result: Splitter = serde_yaml::from_str(&strbuf).unwrap();
     let output_filename = args[1].clone();
 
-    let mut output_file = OpenOptions::new().write(true).create(true).open(&output_filename).unwrap();
+    let mut output_file = OpenOptions::new().write(true).create(true).truncate(true).open(&output_filename).unwrap();
 
     let mut curr_addr = 0;
     let mut index = 0;
@@ -195,11 +190,10 @@ fn cmd_merge(args: Vec<String>) {
                 },
                 "c" => format!("build/{n}{segment_type}.bin"),
                 "asm" => format!("asm/{n}.bin"),
-                "obj" => format!("build/{n}.bin"),
                 _ => panic!("Unknown format '{f}'.")
             };
 
-            let file_size = std::fs::metadata(&binfile).unwrap().len();
+            let file_size = std::fs::metadata(&binfile).expect(&format!("{} does not exist", binfile)).len();
             if file_size != seg.size as u64 {
                 panic!("{binfile} is {} bytes when it should be {}.", file_size, seg.size);
             }
