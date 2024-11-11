@@ -24,6 +24,7 @@ struct Segment {
 struct Splitter {
     name: String,
     sha1: String,
+    vram_offset: u64,
     segments: Vec<Segment>,
 }
 
@@ -50,17 +51,16 @@ fn cmd_split(args: Vec<String>) {
         panic!("'split' command requires 1 argument and 2 optional ones: <file>.yaml [<file>.xex]");
     }
 
-    let mut symbols = HashMap::<String, u64>::new();
+    let mut symbols = HashMap::new();
 
     if std::fs::metadata("addresses.txt").is_ok() {
         for line in std::fs::read_to_string("addresses.txt").unwrap().lines() {
             let linedata: Vec<_> = line.split(" ").collect();
             assert_eq!(linedata.len(), 2);
             
-            let addr = u64::from_str_radix(&linedata[0][2..], 16).unwrap();
+            let addr = u64::from_str_radix(&linedata[0], 16).unwrap();
             let name = linedata[1].to_string();
-
-            symbols.insert(name, addr);
+            symbols.insert(addr, name);
         }
     }
 
@@ -102,10 +102,10 @@ fn cmd_split(args: Vec<String>) {
                     std::fs::create_dir_all(dir).unwrap();
                     std::fs::write(format!("{}/{}.bin", dir, seg.name), buff).unwrap();
                 },
-                "asm" => disassemble(&seg, &buff, &symbols, "asm"),
+                "asm" => disassemble(&seg.name, &buff, seg.start + result.vram_offset, &symbols, "asm"),
                 "c" => {
                     if seg.segment.is_none() {
-                        disassemble(&seg, &buff, &symbols, "matching");
+                        disassemble(&seg.name, &buff, seg.start + result.vram_offset, &symbols, "matching");
                     }
                 },
                 _ => panic!("Unknown format '{}'!", seg.format),
@@ -125,11 +125,9 @@ fn dump_bin(file: &mut File, size: usize, filename: &str) {
     std::fs::write(filename, buff).unwrap();
 }
 
-fn disassemble(segment: &Segment, data: &[u8], symbols: &HashMap::<String, u64>, directory: &str) {
+fn disassemble(name: &str, data: &[u8], addr: u64, symbols: &HashMap::<u64, String>, directory: &str) {
     std::fs::create_dir_all(directory).unwrap();
-    std::fs::write(format!("{}/{}.bin", directory, segment.name), data).unwrap();
-    
-    let vram = if symbols.contains_key(&segment.name) { symbols[&segment.name] } else { 0 };
+    std::fs::write(format!("{}/{}.bin", directory, name), data).unwrap();
 
     let cs = Capstone::new()
         .ppc()
@@ -137,11 +135,13 @@ fn disassemble(segment: &Segment, data: &[u8], symbols: &HashMap::<String, u64>,
         .endian(capstone::Endian::Big)
         .build()
         .expect("Failed to create Capstone object");
-    let insns = cs.disasm_all(data, vram).expect("Failed to disassemble");
+    let insns = cs.disasm_all(data, addr).expect("Failed to disassemble");
 
-    let mut f = File::create(format!("{}/{}.s", directory, segment.name)).expect("Unable to create file");
-    write!(f, "{}:\n", segment.name).unwrap();
+    let mut f = File::create(format!("{}/{}.s", directory, name)).expect("Unable to create file");
     for i in insns.as_ref() {
+        if let Some(name) = symbols.get(&i.address()) {
+            write!(f, "{name}:\n").unwrap();
+        }
         write!(f, "{}\n", i).unwrap();
     }
 }
