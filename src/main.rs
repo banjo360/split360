@@ -266,11 +266,11 @@ fn cmd_checksum(args: Vec<String>) {
     let input_file = args[1].clone();
     let sha1sum = calculate_sha1sum(&input_file);
 
-    println!("checksum expected: {}", result.sha1);
-    println!("checksum calculated: {}", sha1sum);
     if sha1sum == result.sha1 {
-        println!("match");
+        println!("MATCH");
     } else {
-        println!("mismatch");
+        println!("MISMATCH");
+        println!("checksum expected: {}", result.sha1);
+        println!("checksum calculated: {}", sha1sum);
     }
 }
